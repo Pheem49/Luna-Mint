@@ -13,9 +13,12 @@ function openApp(target) {
             cmd = `open "${target}"`;
         }
     } else {
-        cmd = `xdg-open "${target}"`;
+        const tLower = target.toLowerCase();
+        // Try common linux patterns: gtk-launch, exact name, lowercase, flatpak
         if (!target.includes('/')) {
-            cmd = `gtk-launch ${target} || ${target}`;
+            cmd = `gtk-launch ${target} || gtk-launch ${tLower} || ${target} || ${tLower} || flatpak run com.${tLower}app.${target} || flatpak run com.${tLower}.${target} || snap run ${tLower}`;
+        } else {
+            cmd = `xdg-open "${target}"`;
         }
     }
 
@@ -23,8 +26,8 @@ function openApp(target) {
         if (error) {
             console.error(`exec error: ${error}`);
             if (process.platform !== 'win32') {
-                exec(target, (err2) => {
-                    if (err2) console.error("Fallback exec failed:", err2);
+                exec(target.toLowerCase(), (err2) => {
+                    if (err2) console.error("Fallback lowercase exec failed:", err2);
                 });
             }
         }

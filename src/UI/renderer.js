@@ -262,19 +262,34 @@ chatForm.addEventListener('submit', async (e) => {
     if (!text && !currentBase64Image) return;
 
     // Cache the image for sending and UI, then clear
-    const imageToSend = currentBase64Image;
+    let imageToSend = currentBase64Image;
+    let isSmartContextImage = false;
     
-    // Clear input & UI
+    // Clear input & UI for explicit images
     chatInput.value = '';
     currentBase64Image = null;
     imagePreviewContainer.style.display = 'none';
     imagePreview.src = '';
 
-    // Show user message (with image if available)
+    // Show user message (with explicit image if available)
     appendMessage(text, 'user', imageToSend);
 
-    // Show typing
+    // Show typing early so user knows we are processing
     showTyping();
+
+    // Check Smart Context Toggle
+    const smartToggle = document.getElementById('smart-context-toggle');
+    if (smartToggle && smartToggle.checked && !imageToSend) {
+        try {
+            const silentCapture = await window.api.captureSilentScreen();
+            if (silentCapture) {
+                // Set imageToSend so it gets sent to the API, but we already appended the chat bubble
+                imageToSend = silentCapture;
+            }
+        } catch (err) {
+            console.error("Smart Context capture failed:", err);
+        }
+    }
 
     try {
         // Send to main process

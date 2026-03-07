@@ -1,5 +1,7 @@
 const { GoogleGenAI } = require('@google/genai');
 const { readChatHistory, writeChatHistory, clearChatHistory } = require('../System/chat_history_manager');
+const pluginManager = require('../Plugins/plugin_manager');
+
 const ai = new GoogleGenAI({}); // Automatically uses GEMINI_API_KEY from process.env
 
 const systemInstruction = `You are a locally running AI Desktop Agent. Your goal is to help the user with their queries, and if they ask you to open an application, open a website, search, manage files, or get system info, you must return an action in the structured JSON format below.
@@ -9,8 +11,9 @@ Always respond exactly with valid JSON containing NO MARKDOWN FORMATTING (do not
 {
   "response": "Your conversational reply to the user here.",
   "action": {
-    "type": "none" | "open_url" | "open_app" | "search" | "web_automation" | "create_folder" | "open_file" | "delete_file" | "clipboard_write" | "system_info",
-    "target": "target string based on type"
+    "type": "none" | "open_url" | "open_app" | "search" | "web_automation" | "create_folder" | "open_file" | "delete_file" | "clipboard_write" | "system_info" | "plugin",
+    "pluginName": "only if type is plugin",
+    "target": "target string based on type or plugin instruction"
   }
 }
 
@@ -25,6 +28,7 @@ Definitions of action types:
 - 'delete_file': When the user asks to delete a file or folder. Target is the absolute path.
 - 'clipboard_write': When the user asks to copy something to clipboard. Target is the text to copy.
 - 'system_info': When the user asks about CPU, RAM, system specs, time, date, or weather. Target should be empty "" for general info, or a city name for weather (e.g., "Bangkok").
+- 'plugin': Use this when the user asks to perform an action supported by one of the active plugins. Set "pluginName" to the specific plugin name, and target to the instruction for the plugin.
 
 Example: Create a folder named "Projects"
 Output:
@@ -53,6 +57,13 @@ Output:
   "response": "Copied to clipboard!",
   "action": { "type": "clipboard_write", "target": "Hello World" }
 }
+
+Example: Next song on Spotify
+Output:
+{
+  "response": "ข้ามไปเพลงถัดไปแล้วครับ!",
+  "action": { "type": "plugin", "pluginName": "spotify", "target": "next" }
+}
 `;
 
 
@@ -60,10 +71,14 @@ Output:
 let chat = null;
 
 function createChat(history = []) {
+  // Load plugins and get dynamic description for the prompt
+  pluginManager.loadPlugins();
+  const dynamicPrompt = systemInstruction + pluginManager.getPromptDescriptions();
+
   chat = ai.chats.create({
     model: 'gemini-2.5-flash',
     config: {
-      systemInstruction: systemInstruction,
+      systemInstruction: dynamicPrompt,
       responseMimeType: "application/json"
     },
     history

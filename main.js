@@ -10,6 +10,7 @@ const { createFolder, openFile, deleteFile } = require('./src/Automation_Layer/f
 const { getSystemInfo, getWeather } = require('./src/System/system_info');
 const { readConfig, writeConfig } = require('./src/System/config_manager');
 const { parseCommand } = require('./src/Command_Parser/parser');
+const pluginManager = require('./src/Plugins/plugin_manager');
 
 let mainWindow;
 let settingsWindow = null;
@@ -288,6 +289,27 @@ ipcMain.on('vision-cancel', () => {
     if (mainWindow) mainWindow.show();
 });
 
+ipcMain.handle('capture-silent-screen', async () => {
+    try {
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width, height } = primaryDisplay.size;
+        
+        const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width, height }
+        });
+        
+        const primarySource = sources[0];
+        if (primarySource && primarySource.thumbnail) {
+            return primarySource.thumbnail.toDataURL();
+        }
+        return null;
+    } catch (err) {
+        console.error("Error silently capturing screen:", err);
+        return null;
+    }
+});
+
 // =====================
 // Action Executor
 // =====================
@@ -318,5 +340,7 @@ async function executeAction(action) {
         case 'clipboard_write':
             clipboard.writeText(action.target);
             break;
+        case 'plugin':
+            return await pluginManager.executePlugin(action.pluginName, action.target);
     }
 }
