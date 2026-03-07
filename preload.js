@@ -19,5 +19,10 @@ contextBridge.exposeInMainWorld('api', {
     // Vision
     startVision: () => ipcRenderer.invoke('start-screen-capture'),
     onVisionReady: (callback) => ipcRenderer.on('vision-ready', (_event, image) => callback(image)),
-    captureSilentScreen: () => ipcRenderer.invoke('capture-silent-screen')
+    captureSilentScreen: () => ipcRenderer.invoke('capture-silent-screen'),
+    // Proactive Assistant
+    onProactiveSuggestion: (callback) => ipcRenderer.on('proactive-suggestion', (_event, data) => callback(data)),
+    toggleProactive: (isOn) => ipcRenderer.send('toggle-proactive', isOn),
+    recordBehavior: (context) => ipcRenderer.send('record-behavior', context),
+    executeProactiveAction: (action) => ipcRenderer.invoke('execute-proactive-action', action)
 });

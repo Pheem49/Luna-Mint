@@ -11,11 +11,71 @@ const { getSystemInfo, getWeather } = require('./src/System/system_info');
 const { readConfig, writeConfig } = require('./src/System/config_manager');
 const { parseCommand } = require('./src/Command_Parser/parser');
 const pluginManager = require('./src/Plugins/plugin_manager');
+const { analyzeAndSuggest } = require('./src/AI_Brain/proactive_engine');
+const { recordBehavior, getBehaviorSummary } = require('./src/AI_Brain/behavior_memory');
 
 let mainWindow;
 let settingsWindow = null;
 let screenPickerWindow = null;
 let tray = null;
+
+// =====================
+// Proactive Loop
+// =====================
+let proactiveIntervalHandle = null;
+
+async function runProactiveCycle() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+        // Silent screen capture
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width, height } = primaryDisplay.size;
+        const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width, height }
+        });
+        const primarySource = sources[0];
+        if (!primarySource || !primarySource.thumbnail) return;
+
+        const base64Image = primarySource.thumbnail.toDataURL();
+        const behaviorSummary = getBehaviorSummary();
+
+        const result = await analyzeAndSuggest(base64Image, behaviorSummary);
+
+        if (result && result.message && Array.isArray(result.suggestions)) {
+            // Record the observed context into behavior memory
+            if (result.context) recordBehavior(result.context);
+
+            // Push suggestion to the renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('proactive-suggestion', result);
+            }
+        }
+    } catch (err) {
+        console.error('[Proactive] Cycle error:', err.message);
+    }
+}
+
+function startProactiveLoop(intervalSec) {
+    // Stop existing loop first
+    if (proactiveIntervalHandle) {
+        clearInterval(proactiveIntervalHandle);
+        proactiveIntervalHandle = null;
+    }
+    // Read from config if not provided
+    const cfg = readConfig();
+    const ms = (intervalSec || cfg.proactiveInterval || 60) * 1000;
+    console.log(`[Proactive] Starting loop — interval: ${ms / 1000}s`);
+    proactiveIntervalHandle = setInterval(runProactiveCycle, ms);
+}
+
+function stopProactiveLoop() {
+    if (proactiveIntervalHandle) {
+        clearInterval(proactiveIntervalHandle);
+        proactiveIntervalHandle = null;
+        console.log('[Proactive] Stopped proactive loop.');
+    }
+}
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -191,6 +251,10 @@ ipcMain.handle('save-settings', (event, config) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('settings-changed', config);
     }
+    // Restart proactive loop with new interval if it's running
+    if (proactiveIntervalHandle) {
+        startProactiveLoop(config.proactiveInterval);
+    }
     return result;
 });
 
@@ -287,6 +351,47 @@ ipcMain.on('vision-selection', (event, base64Image) => {
 ipcMain.on('vision-cancel', () => {
     if (screenPickerWindow) screenPickerWindow.close();
     if (mainWindow) mainWindow.show();
+});
+
+// =====================
+// IPC Handlers — Proactive Assistant
+// =====================
+ipcMain.on('toggle-proactive', (event, isOn) => {
+    if (isOn) {
+        startProactiveLoop(); // reads interval from config automatically
+    } else {
+        stopProactiveLoop();
+    }
+});
+
+ipcMain.on('record-behavior', (event, contextDescription) => {
+    recordBehavior(contextDescription);
+});
+
+// Direct action executor for proactive Accept (no Gemini involved)
+ipcMain.handle('execute-proactive-action', async (event, action) => {
+    if (!action || action.type === 'none') {
+        return { success: false, message: 'ไม่มี action ที่จะดำเนินการค่ะ' };
+    }
+    try {
+        const result = await executeAction(action);
+        // Build a friendly confirmation message
+        const messages = {
+            open_url:  `เปิดเว็บไซต์ให้แล้วค่ะ 🌐`,
+            open_app:  `เปิดแอป ${action.target} ให้แล้วค่ะ 🚀`,
+            search:    `ค้นหา "${action.target}" ให้แล้วค่ะ 🔍`,
+            web_automation: result || 'ดำเนินการเสร็จแล้วค่ะ ✅',
+            create_folder:  `สร้างโฟลเดอร์ "${action.target}" แล้วค่ะ 📁`,
+            clipboard_write: `คัดลอกข้อความแล้วค่ะ 📋`,
+        };
+        return {
+            success: true,
+            message: messages[action.type] || 'ดำเนินการเสร็จแล้วค่ะ ✅'
+        };
+    } catch (err) {
+        console.error('[ProactiveAction] Error:', err);
+        return { success: false, message: `เกิดข้อผิดพลาด: ${err.message}` };
+    }
 });
 
 ipcMain.handle('capture-silent-screen', async () => {

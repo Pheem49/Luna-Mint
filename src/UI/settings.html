@@ -102,6 +102,35 @@
                 </div>
             </section>
 
+            <hr class="divider">
+
+            <!-- Proactive Assistant -->
+            <section class="setting-section">
+                <h2 class="section-title">✨ Proactive Assistant</h2>
+
+                <div class="setting-row">
+                    <label for="proactive-interval">ความถี่ในการ Capture หน้าจอ</label>
+                    <div class="slider-group">
+                        <input type="range" id="proactive-interval"
+                            min="30" max="300" step="30" value="60"
+                            class="range-slider">
+                        <span class="range-value" id="proactive-interval-display">60 วิ</span>
+                    </div>
+                    <p class="hint">ทุกกี่วินาที AI จะวิเคราะห์หน้าจอ (น้อย = ตอบสนองเร็ว แต่กิน API มากขึ้น)</p>
+                </div>
+
+                <div class="setting-row" style="margin-top: 14px;">
+                    <label for="proactive-cooldown">ช่วงพักระหว่าง Suggestion</label>
+                    <div class="slider-group">
+                        <input type="range" id="proactive-cooldown"
+                            min="60" max="600" step="60" value="120"
+                            class="range-slider">
+                        <span class="range-value" id="proactive-cooldown-display">2 นาที</span>
+                    </div>
+                    <p class="hint">ห้าม AI ถามซ้ำภายในกี่วินาที (มาก = รบกวนน้อยลง)</p>
+                </div>
+            </section>
+
         </main>
 
         <footer class="settings-footer">

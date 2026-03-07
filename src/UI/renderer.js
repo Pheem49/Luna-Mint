@@ -10,6 +10,12 @@ const imagePreviewContainer = document.getElementById('image-preview-container')
 const imagePreview = document.getElementById('image-preview');
 const removeImageBtn = document.getElementById('remove-image-btn');
 
+// Proactive Assistant elements
+const proactiveBar = document.getElementById('proactive-bar');
+const proactiveMessage = document.getElementById('proactive-message');
+const proactiveChips = document.getElementById('proactive-chips');
+const proactiveDismissBtn = document.getElementById('proactive-dismiss-btn');
+
 let currentBase64Image = null;
 
 // --- Theme Loading ---
@@ -291,6 +297,9 @@ chatForm.addEventListener('submit', async (e) => {
         }
     }
 
+    // Hide proactive bar if user is actively typing a message
+    hideProactiveBar();
+
     try {
         // Send to main process
         const response = await window.api.sendMessage(text, imageToSend);
@@ -384,3 +393,80 @@ window.addEventListener('DOMContentLoaded', async () => {
     await loadTheme();
     await loadChatHistory();
 });
+
+// =====================
+// Proactive Smart Suggestion Engine
+// =====================
+
+function showProactiveBar(data) {
+    // Clear old chips
+    proactiveChips.innerHTML = '';
+
+    // Set message
+    proactiveMessage.textContent = data.message || '';
+
+    // Render each suggestion as a chip
+    data.suggestions.forEach((item, index) => {
+        const chip = document.createElement('button');
+        chip.className = 'suggestion-chip';
+        chip.textContent = item.label;
+        chip.style.animationDelay = `${index * 60}ms`;
+
+        chip.addEventListener('click', async () => {
+            hideProactiveBar();
+
+            if (window.api.recordBehavior) {
+                window.api.recordBehavior(`User picked: ${item.label}`);
+            }
+
+            showTyping();
+            try {
+                const result = await window.api.executeProactiveAction(item.action);
+                removeTyping();
+                const confirmText = result?.message || `เปิด ${item.label} แล้วค่ะ ✅`;
+                const msgDiv = appendMessage(confirmText, 'ai');
+                speakText(confirmText);
+                if (item.action && item.action.type !== 'none') {
+                    appendActionCard(msgDiv, item.action);
+                }
+            } catch (err) {
+                removeTyping();
+                appendMessage('ขออภัยค่ะ เกิดข้อผิดพลาด', 'ai');
+                console.error('[Chip] Error:', err);
+            }
+        });
+
+        proactiveChips.appendChild(chip);
+    });
+
+    // Show bar with animation reset
+    proactiveBar.style.display = 'none';
+    requestAnimationFrame(() => {
+        proactiveBar.style.display = 'block';
+    });
+}
+
+function hideProactiveBar() {
+    proactiveBar.style.display = 'none';
+    proactiveChips.innerHTML = '';
+}
+
+// Receive multi-suggestion data from main process
+window.api.onProactiveSuggestion((data) => {
+    if (data && data.message && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+        showProactiveBar(data);
+    }
+});
+
+// Dismiss button
+proactiveDismissBtn.addEventListener('click', () => {
+    hideProactiveBar();
+});
+
+// Sync Smart Context toggle → start/stop proactive loop
+const smartContextToggle = document.getElementById('smart-context-toggle');
+if (smartContextToggle) {
+    smartContextToggle.addEventListener('change', () => {
+        window.api.toggleProactive(smartContextToggle.checked);
+    });
+}

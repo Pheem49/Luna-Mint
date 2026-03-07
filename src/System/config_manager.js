@@ -9,7 +9,9 @@ const DEFAULT_CONFIG = {
     accentColor: '#8b5cf6',
     apiKey: '',
     language: 'th-TH',
-    automationBrowser: 'chromium'
+    automationBrowser: 'chromium',
+    proactiveInterval: 60,   // seconds between screen captures
+    proactiveCooldown: 120   // seconds minimum between actual suggestions
 };
 
 function readConfig() {

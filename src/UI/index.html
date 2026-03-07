@@ -44,6 +44,18 @@
       </button>
     </header>
 
+    <!-- Proactive Suggestion Bar (Smart Suggestion Engine) -->
+    <div id="proactive-bar" class="proactive-bar" style="display: none;">
+      <div class="proactive-header">
+        <span class="proactive-icon">✨</span>
+        <span class="proactive-message" id="proactive-message"></span>
+        <button class="proactive-dismiss-btn" id="proactive-dismiss-btn" title="ปิด">✕</button>
+      </div>
+      <div class="proactive-chips" id="proactive-chips">
+        <!-- Chips injected by JS -->
+      </div>
+    </div>
+
     <main class="chat-container" id="chat-container">
       <div class="message ai-message initial">
         <div class="message-bubble">

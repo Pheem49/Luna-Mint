@@ -2,7 +2,9 @@ const DEFAULT_CONFIG = {
     theme: 'dark',
     accentColor: '#8b5cf6',
     apiKey: '',
-    language: 'th-TH'
+    language: 'th-TH',
+    proactiveInterval: 60,
+    proactiveCooldown: 120
 };
 
 let currentConfig = { ...DEFAULT_CONFIG };
@@ -42,6 +44,14 @@ function applyConfig(config) {
 
     // Update color picker
     document.getElementById('custom-color').value = config.accentColor;
+
+    // Apply proactive settings
+    const interval = config.proactiveInterval || 60;
+    const cooldown = config.proactiveCooldown || 120;
+    document.getElementById('proactive-interval').value = interval;
+    document.getElementById('proactive-cooldown').value = cooldown;
+    updateIntervalDisplay(interval);
+    updateCooldownDisplay(cooldown);
 }
 
 function lightenColor(hex, amount) {
@@ -96,11 +106,36 @@ document.getElementById('custom-color').addEventListener('input', (e) => {
     document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
 });
 
+// Proactive sliders
+function formatSeconds(s) {
+    if (s < 60) return `${s} วิ`;
+    const m = s / 60;
+    return Number.isInteger(m) ? `${m} นาที` : `${m.toFixed(1)} นาที`;
+}
+
+function updateIntervalDisplay(val) {
+    document.getElementById('proactive-interval-display').textContent = formatSeconds(Number(val));
+}
+
+function updateCooldownDisplay(val) {
+    document.getElementById('proactive-cooldown-display').textContent = formatSeconds(Number(val));
+}
+
+document.getElementById('proactive-interval').addEventListener('input', (e) => {
+    updateIntervalDisplay(e.target.value);
+});
+
+document.getElementById('proactive-cooldown').addEventListener('input', (e) => {
+    updateCooldownDisplay(e.target.value);
+});
+
 // Save
 document.getElementById('save-btn').addEventListener('click', async () => {
     currentConfig.apiKey = document.getElementById('api-key-input').value.trim();
     currentConfig.automationBrowser = document.getElementById('automation-browser-select').value;
-    
+    currentConfig.proactiveInterval = Number(document.getElementById('proactive-interval').value);
+    currentConfig.proactiveCooldown = Number(document.getElementById('proactive-cooldown').value);
+
     await window.settingsApi.saveSettings(currentConfig);
     const btn = document.getElementById('save-btn');
     btn.textContent = '✅ Saved!';
