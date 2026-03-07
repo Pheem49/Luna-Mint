@@ -10,6 +10,8 @@ Mint เป็น Desktop Agent ที่ขับเคลื่อนด้ว
 | ความสามารถ | รายละเอียด |
 |-----------|-----------|
 | 💬 AI Chat | คุยด้วยภาษาธรรมชาติผ่าน Google Gemini พร้อมจำบทสนทนา |
+| 👁️ Screen Vision | ให้ AI ดูหน้าจอ หรือแคปรูปเฉพาะส่วนไปวิเคราะห์ได้เลย |
+| 🖼️ Image Drop | รองรับการ Copy & Paste และ Drag & Drop ไฟล์รูปภาพ |
 | 🌐 Open URL | สั่งเปิดเว็บไซต์ได้เลย |
 | 🔍 Web Search | ค้นหา Google โดยอัตโนมัติ |
 | 🚀 Open App | สั่งเปิดโปรแกรมบนเครื่อง |
@@ -20,6 +22,7 @@ Mint เป็น Desktop Agent ที่ขับเคลื่อนด้ว
 | ⚙️ Settings | ตั้งค่า API Key, Theme, Accent Color ผ่าน UI |
 | 🎨 Multiple Themes | Dark / Light / Midnight + Custom Accent Color |
 | 🎙️ Voice Input | พูดสั่งด้วย Web Speech API ภาษาไทย |
+| 📥 Tray Icon | รันซ่อนใน Background ผ่าน System Tray เข้าถึงง่าย |
 | ⌨️ Global Shortcut | `Ctrl+Shift+Space` เรียก Mint ได้ทุกที่ |
 
 ---
@@ -77,6 +80,7 @@ npm start
 "RAM เหลือเท่าไหร่"                   → แสดงข้อมูลระบบ
 "อากาศที่กรุงเทพวันนี้เป็นยังไง"      → ดึงข้อมูลอากาศ
 "Copy ข้อความ Hello World"            → copy ไป Clipboard
+"แปลข้อความในรูปนี้ให้หน่อย"          → (ใช้คู่กับปุ่ม Vision 👁️ หรือลากรูปลงช่องแชท)
 ```
 
 ---
@@ -85,14 +89,17 @@ npm start
 
 ```
 Mint/
+├── assets/
+│   └── icon.png                    # App Icon
 ├── main.js                         # Entry point (Electron Main Process)
 ├── preload.js                      # Preload — Chat window
 ├── preload-settings.js             # Preload — Settings window
+├── preload-picker.js               # Preload — Vision Picker window
 ├── package.json
 ├── .env                            # API Keys (ห้ามขึ้น Git!)
 └── src/
     ├── AI_Brain/
-    │   └── Gemini_API.js           # Gemini Chat Session (มี History)
+    │   └── Gemini_API.js           # Gemini Chat Session (มี History & Vision)
     ├── Automation_Layer/
     │   ├── open_app.js             # เปิดโปรแกรม
     │   ├── open_website.js         # เปิดเว็บ / ค้นหา
@@ -109,7 +116,9 @@ Mint/
         ├── renderer.js             # Chat Logic
         ├── settings.html           # Settings Window
         ├── settings.css            # Settings Styling
-        └── settings.js             # Settings Logic
+        ├── settings.js             # Settings Logic
+        ├── screenPicker.html       # Vision Screen Overlay
+        └── screenPicker.js         # Vision Logic & Region Selector
 ```
 
 ---

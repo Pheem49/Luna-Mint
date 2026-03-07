@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, globalShortcut, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, globalShortcut, clipboard, Tray, Menu, nativeImage, desktopCapturer, screen } = require('electron');
 const path = require('path');
 require('dotenv').config();
 
@@ -13,12 +13,14 @@ const { parseCommand } = require('./src/Command_Parser/parser');
 
 let mainWindow;
 let settingsWindow = null;
+let screenPickerWindow = null;
 let tray = null;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 400,
         height: 600,
+        icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -45,6 +47,38 @@ function createWindow() {
     });
 }
 
+function createTray() {
+    const iconPath = path.join(__dirname, 'assets', 'icon.png');
+    let icon = nativeImage.createFromPath(iconPath);
+    // Optional: resize it for the tray if needed, but Electron handles this natively on many OSs
+    icon = icon.resize({ width: 16, height: 16 });
+    
+    tray = new Tray(icon);
+    tray.setToolTip('Mint AI Assistant');
+    
+    const contextMenu = Menu.buildFromTemplate([
+        { label: 'Show App', click: () => { if (mainWindow) mainWindow.show(); } },
+        { label: 'Settings', click: () => { createSettingsWindow(); } },
+        { type: 'separator' },
+        { label: 'Quit', click: () => {
+            app.isQuiting = true;
+            app.quit();
+        }}
+    ]);
+    
+    tray.setContextMenu(contextMenu);
+    
+    tray.on('click', () => {
+        if (mainWindow) {
+            if (mainWindow.isVisible()) {
+                mainWindow.hide();
+            } else {
+                mainWindow.show();
+            }
+        }
+    });
+}
+
 function createSettingsWindow() {
     if (settingsWindow) {
         settingsWindow.focus();
@@ -53,6 +87,7 @@ function createSettingsWindow() {
     settingsWindow = new BrowserWindow({
         width: 440,
         height: 560,
+        icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload-settings.js'),
             nodeIntegration: false,
@@ -69,6 +104,7 @@ function createSettingsWindow() {
 
 app.whenReady().then(() => {
     createWindow();
+    createTray();
 
     globalShortcut.register('CommandOrControl+Shift+Space', () => {
         if (mainWindow) {
@@ -96,9 +132,9 @@ app.on('will-quit', () => {
 // =====================
 // IPC Handlers — Chat
 // =====================
-ipcMain.handle('chat-message', async (event, message) => {
+ipcMain.handle('chat-message', async (event, message, base64Image = null) => {
     try {
-        const rawResponse = await handleChat(message);
+        const rawResponse = await handleChat(message, base64Image);
         const aiResponse = parseCommand(rawResponse);
 
         if (aiResponse.action && aiResponse.action.type !== 'none') {
@@ -182,6 +218,70 @@ ipcMain.handle('get-system-info', async () => {
 
 ipcMain.handle('get-weather', async (event, city) => {
     return getWeather(city);
+});
+
+// =====================
+// IPC Handlers — Screen Vision
+// =====================
+ipcMain.handle('start-screen-capture', async () => {
+    if (screenPickerWindow) return; // Prevent multiple windows
+
+    try {
+        // Capture primary display
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width, height } = primaryDisplay.size;
+        
+        const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width, height }
+        });
+        
+        // Find the full primary screen (usually "Screen 1" or "Entire screen")
+        const primarySource = sources[0]; // Assuming single/primary monitor is the first
+
+        // Create transparent, borderless screen picker window
+        screenPickerWindow = new BrowserWindow({
+            width, height,
+            x: primaryDisplay.bounds.x, y: primaryDisplay.bounds.y,
+            fullscreen: true,
+            transparent: true,
+            frame: false,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            webPreferences: {
+                preload: path.join(__dirname, 'preload-picker.js'),
+                nodeIntegration: false,
+                contextIsolation: true
+            }
+        });
+
+        await screenPickerWindow.loadFile('src/UI/screenPicker.html');
+        
+        // Ensure image data isn't missing
+        if(primarySource && primarySource.thumbnail) {
+            screenPickerWindow.webContents.send('screenshot-data', primarySource.thumbnail.toDataURL());
+        }
+
+        screenPickerWindow.on('closed', () => { screenPickerWindow = null; });
+    } catch (err) {
+        console.error("Error starting screen capture:", err);
+    }
+});
+
+// Received selection from the picker
+ipcMain.on('vision-selection', (event, base64Image) => {
+    if (screenPickerWindow) screenPickerWindow.close();
+    
+    // Relay image back to main window interface
+    if (mainWindow) {
+        mainWindow.webContents.send('vision-ready', base64Image);
+        mainWindow.show(); // Bring chat back to focus
+    }
+});
+
+ipcMain.on('vision-cancel', () => {
+    if (screenPickerWindow) screenPickerWindow.close();
+    if (mainWindow) mainWindow.show();
 });
 
 // =====================

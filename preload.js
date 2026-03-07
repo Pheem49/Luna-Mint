@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-    sendMessage: (message) => ipcRenderer.invoke('chat-message', message),
+    sendMessage: (message, base64Image) => ipcRenderer.invoke('chat-message', message, base64Image),
     closeWindow: () => ipcRenderer.send('close-window'),
     resetChat: () => ipcRenderer.invoke('reset-chat'),
     getChatHistory: () => ipcRenderer.invoke('get-chat-history'),
@@ -16,4 +16,7 @@ contextBridge.exposeInMainWorld('api', {
     getSettings: () => ipcRenderer.invoke('get-settings'),
     // Listen for settings changes from other window
     onSettingsChanged: (callback) => ipcRenderer.on('settings-changed', (_event, config) => callback(config)),
+    // Vision
+    startVision: () => ipcRenderer.invoke('start-screen-capture'),
+    onVisionReady: (callback) => ipcRenderer.on('vision-ready', (_event, image) => callback(image))
 });

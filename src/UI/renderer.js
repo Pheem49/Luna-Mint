@@ -5,6 +5,12 @@ const closeBtn = document.getElementById('close-btn');
 const clearBtn = document.getElementById('clear-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const micBtn = document.getElementById('mic-btn');
+const visionBtn = document.getElementById('vision-btn');
+const imagePreviewContainer = document.getElementById('image-preview-container');
+const imagePreview = document.getElementById('image-preview');
+const removeImageBtn = document.getElementById('remove-image-btn');
+
+let currentBase64Image = null;
 
 // --- Theme Loading ---
 function applyTheme(theme, accentColor) {
@@ -75,12 +81,17 @@ if (SpeechRecognition) {
     console.warn("Speech Recognition API not supported in this browser.");
 }
 
-micBtn.addEventListener('click', () => {
+micBtn.addEventListener('click', (e) => {
+    e.preventDefault(); // Prevent form submission if it's inside one
     if (recognition) {
         if (micBtn.classList.contains('listening')) {
             recognition.stop();
         } else {
-            recognition.start();
+            try {
+                recognition.start();
+            } catch (err) {
+                console.warn("Speech recognition already started or failed:", err);
+            }
         }
     }
 });
@@ -112,6 +123,24 @@ settingsBtn.addEventListener('click', () => {
     window.api.openSettings();
 });
 
+// Vision system
+visionBtn.addEventListener('click', async () => {
+    await window.api.startVision();
+});
+
+window.api.onVisionReady((base64Image) => {
+    currentBase64Image = base64Image;
+    imagePreview.src = base64Image;
+    imagePreviewContainer.style.display = 'block';
+    chatInput.focus();
+});
+
+removeImageBtn.addEventListener('click', () => {
+    currentBase64Image = null;
+    imagePreview.src = '';
+    imagePreviewContainer.style.display = 'none';
+});
+
 // Clear chat history
 clearBtn.addEventListener('click', async () => {
     await window.api.resetChat();
@@ -122,13 +151,28 @@ clearBtn.addEventListener('click', async () => {
     appendMessage('Chat history cleared. Starting fresh! 🌿', 'ai');
 });
 
-function appendMessage(text, sender) {
+function appendMessage(text, sender, base64Image = null) {
     const messageDiv = document.createElement('div');
     messageDiv.classList.add('message', `${sender}-message`);
 
     const bubble = document.createElement('div');
     bubble.classList.add('message-bubble');
-    bubble.textContent = text;
+
+    if (base64Image && sender === 'user') {
+        const img = document.createElement('img');
+        img.src = base64Image;
+        img.style.maxWidth = '100%';
+        img.style.borderRadius = '4px';
+        img.style.marginBottom = '8px';
+        img.style.display = 'block';
+        bubble.appendChild(img);
+    }
+
+    if (text) {
+        const textSpan = document.createElement('span');
+        textSpan.textContent = text;
+        bubble.appendChild(textSpan);
+    }
 
     messageDiv.appendChild(bubble);
     chatContainer.appendChild(messageDiv);
@@ -213,20 +257,28 @@ async function loadChatHistory() {
 chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = chatInput.value.trim();
-    if (!text) return;
+    
+    // We can send either a text message, an image, or both.
+    if (!text && !currentBase64Image) return;
 
-    // Clear input
+    // Cache the image for sending and UI, then clear
+    const imageToSend = currentBase64Image;
+    
+    // Clear input & UI
     chatInput.value = '';
+    currentBase64Image = null;
+    imagePreviewContainer.style.display = 'none';
+    imagePreview.src = '';
 
-    // Show user message
-    appendMessage(text, 'user');
+    // Show user message (with image if available)
+    appendMessage(text, 'user', imageToSend);
 
     // Show typing
     showTyping();
 
     try {
         // Send to main process
-        const response = await window.api.sendMessage(text);
+        const response = await window.api.sendMessage(text, imageToSend);
         removeTyping();
 
         // Handle system_info action: fetch data and append to AI message
@@ -257,6 +309,57 @@ chatForm.addEventListener('submit', async (e) => {
         removeTyping();
         appendMessage("Sorry, I encountered an error communicating with the main process.", 'ai');
         console.error(error);
+    }
+});
+
+// --- Image Paste and Drag-n-Drop Support ---
+function handleImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        currentBase64Image = e.target.result;
+        imagePreview.src = currentBase64Image;
+        imagePreviewContainer.style.display = 'block';
+        chatInput.focus();
+    };
+    reader.readAsDataURL(file);
+}
+
+// Paste Event
+chatInput.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            handleImageFile(blob);
+            break; // Handle only the first image
+        }
+    }
+});
+
+// Drag and Drop Events (on the whole chat form/input area)
+const inputArea = document.querySelector('.input-area');
+
+inputArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputArea.style.opacity = '0.7'; // Visual feedback
+});
+
+inputArea.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputArea.style.opacity = '1';
+});
+
+inputArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputArea.style.opacity = '1';
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleImageFile(e.dataTransfer.files[0]);
     }
 });
 

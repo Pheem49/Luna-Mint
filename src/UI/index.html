@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local AI Agent</title>
+  <title>Agent Mint</title>
   <link rel="stylesheet" href="styles.css">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
@@ -54,7 +54,17 @@
     </main>
 
     <footer class="input-area">
+      <div id="image-preview-container" style="display: none; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px 8px 0 0; position: relative;">
+        <img id="image-preview" src="" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
+        <button id="remove-image-btn" type="button" style="position: absolute; top: 5px; right: 10px; background: red; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer;">&times;</button>
+      </div>
       <form id="chat-form">
+        <button type="button" id="vision-btn" aria-label="Screen Vision" title="Screen Vision">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
         <input type="text" id="chat-input" placeholder="Type or speak a command..." autocomplete="off">
         <button type="button" id="mic-btn" aria-label="Microphone">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"

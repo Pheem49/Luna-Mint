@@ -66,9 +66,28 @@ function createChat(history = []) {
 // Initialize on startup
 createChat(readChatHistory());
 
-async function handleChat(message) {
+async function handleChat(message, base64Image = null) {
   try {
-    const aiResponse = await chat.sendMessage({ message });
+    let aiResponse;
+    if (base64Image) {
+        // Remove data URL prefix if present (e.g., 'data:image/png;base64,')
+        const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+        
+        aiResponse = await chat.sendMessage({
+            message: [
+                { text: message || "Analyze this image." },
+                {
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: base64Data
+                    }
+                }
+            ]
+        });
+    } else {
+        aiResponse = await chat.sendMessage({ message });
+    }
+
     writeChatHistory(chat.getHistory(true));
 
     const outputText = aiResponse.text;

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Vision Picker</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.4);
+            cursor: crosshair;
+            user-select: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #overlay-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+
+        #toolbar {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(30, 30, 30, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            display: flex;
+            gap: 10px;
+            color: white;
+            align-items: center;
+        }
+
+        .btn {
+            background: #2a2a2a;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .btn:hover {
+            background: #3a3a3a;
+            color: white;
+            border-color: #666;
+        }
+
+        .btn-primary {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        
+        .btn-primary:hover {
+            background: #218838;
+            border-color: #1e7e34;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            border-color: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            border-color: #bd2130;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #aaa;
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <span class="hint">Click and drag to select a region</span>
+        <button class="btn btn-primary" id="btn-fullscreen">Full Screen</button>
+        <button class="btn btn-danger" id="btn-cancel">Cancel</button>
+    </div>
+
+    <canvas id="bg-canvas"></canvas>
+    <canvas id="overlay-canvas"></canvas>
+
+    <script src="screenPicker.js"></script>
+</body>
+</html>

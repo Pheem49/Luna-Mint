@@ -315,11 +315,12 @@ h1 {
 }
 
 #send-btn,
-#mic-btn {
+#mic-btn,
+#vision-btn {
   background: var(--accent);
   color: white;
   border: none;
-  width: 40px;
+  width: 44px;
   height: 40px;
   border-radius: 10px;
   display: flex;
@@ -331,13 +332,15 @@ h1 {
 }
 
 #send-btn:hover,
-#mic-btn:hover {
+#mic-btn:hover,
+#vision-btn:hover {
   background: var(--accent-hover);
   transform: scale(1.05);
 }
 
 #send-btn:active,
-#mic-btn:active {
+#mic-btn:active,
+#vision-btn:active {
   transform: scale(0.95);
 }
 
@@ -345,6 +348,18 @@ h1 {
   background: #ef4444;
   /* Red color when listening */
   animation: pulse-mic 1.5s infinite;
+}
+
+#vision-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+#vision-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent);
+  border-color: rgba(139, 92, 246, 0.4);
 }
 
 @keyframes pulse-mic {
