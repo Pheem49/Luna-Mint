@@ -139,4 +139,5 @@ Key files:
 
 ## License
 
-This project uses the license terms in [LICENSE](./LICENSE).
+This project is licensed under GNU Affero General Public License v3.0.
+See [LICENSE](./LICENSE).
