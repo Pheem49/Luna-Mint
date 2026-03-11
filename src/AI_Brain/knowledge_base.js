@@ -1,12 +1,24 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
 const { GoogleGenAI } = require('@google/genai');
+
+// Handle electron dependency safely for benchmarks/tests
+let app;
+try {
+    const electron = require('electron');
+    app = electron.app;
+} catch (e) {
+    app = null;
+}
 
 const ai = new GoogleGenAI({});
 
 function getDbPath() {
-    return path.join(app.getPath('userData'), 'mint-knowledge.json');
+    if (app && app.getPath) {
+        return path.join(app.getPath('userData'), 'mint-knowledge.json');
+    }
+    // Fallback for Node.js environment (benchmarking)
+    return path.join(process.cwd(), 'mint-knowledge.json');
 }
 
 function loadDb() {

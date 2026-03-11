@@ -1,8 +1,17 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
 
-const CHAT_HISTORY_PATH = path.join(app.getPath('userData'), 'mint-chat-history.json');
+let app;
+try {
+    const electron = require('electron');
+    app = electron.app;
+} catch (e) {
+    app = null;
+}
+
+const CHAT_HISTORY_PATH = app && app.getPath 
+    ? path.join(app.getPath('userData'), 'mint-chat-history.json')
+    : path.join(process.cwd(), 'mint-chat-history.json');
 
 function readChatHistory() {
     try {

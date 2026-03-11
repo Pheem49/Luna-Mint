@@ -4,6 +4,13 @@ Mint is an Electron desktop assistant powered by Google Gemini. It combines chat
 
 ## Current Features
 
+- **Cute AI Persona (Mint)**: A friendly, cheerful, and polite female assistant with a bubbly personality.
+- **Multilingual Support**: Mint detects and responds in the user's language (Thai, English, etc.) while maintaining her character.
+- **Improved Voice Input**: Enhanced microphone capture with Echo Cancellation, Noise Suppression, and Auto Gain Control for better Gemini processing.
+- **Performance Optimized**: 
+  - **Chat History Truncation**: Implements a sliding window (last 20 messages) to keep responses fast even in long conversations.
+  - **AI Benchmark Tool**: Includes `benchmark_ai.js` to measure latency across different AI tasks.
+- **Robust App Launcher**: Enhanced Linux application launching with support for Flatpak (case-sensitive IDs), Snap, and standard binaries.
 - AI chat backed by `@google/genai`
 - Screen Vision for sending a selected screen region into chat
 - Live Translate mode for continuously translating a selected on-screen area
@@ -12,9 +19,18 @@ Mint is an Electron desktop assistant powered by Google Gemini. It combines chat
 - Clipboard read/write helpers
 - Weather and system info commands
 - Web automation via Puppeteer
-- Voice input through the browser Speech Recognition API
 - Tray integration and global shortcut
 - Plugin loading for Spotify, Docker, and a placeholder Discord plugin
+
+## Benchmarking
+
+To test the AI's response latency and identify bottlenecks, run:
+
+```bash
+node benchmark_ai.js
+```
+
+This tests simple greetings, RAG lookup, action commands, and system info retrieval.
 
 ## Live Translate
 

@@ -1,0 +1,66 @@
+[
+  {
+    "role": "user",
+    "parts": [
+      {
+        "text": "สวัสดีครับ"
+      }
+    ]
+  },
+  {
+    "parts": [
+      {
+        "text": "{\n  \"response\": \"สวัสดีครับ มีอะไรให้ผมช่วยไหมครับ?\",\n  \"action\": {\n    \"type\": \"none\",\n    \"target\": \"\"\n  }\n}"
+      }
+    ],
+    "role": "model"
+  },
+  {
+    "role": "user",
+    "parts": [
+      {
+        "text": "มีข้อมูลอะไรใน test_knowledge.txt บ้าง?"
+      }
+    ]
+  },
+  {
+    "parts": [
+      {
+        "text": "{\n  \"response\": \"ผมสามารถอ่านและเรียนรู้ข้อมูลจากไฟล์ test_knowledge.txt ให้คุณได้ครับ คุณต้องการให้ผมเรียนรู้ไฟล์นี้ใช่ไหมครับ?\",\n  \"action\": {\n    \"type\": \"learn_file\",\n    \"target\": \"test_knowledge.txt\"\n  }\n}"
+      }
+    ],
+    "role": "model"
+  },
+  {
+    "role": "user",
+    "parts": [
+      {
+        "text": "เปิด YouTube ให้หน่อย"
+      }
+    ]
+  },
+  {
+    "parts": [
+      {
+        "text": "{\n  \"response\": \"เปิด YouTube ให้แล้วครับ!\",\n  \"action\": {\n    \"type\": \"open_url\",\n    \"target\": \"https://www.youtube.com\"\n  }\n}"
+      }
+    ],
+    "role": "model"
+  },
+  {
+    "role": "user",
+    "parts": [
+      {
+        "text": "ขอดูข้อมูลระบบหน่อย"
+      }
+    ]
+  },
+  {
+    "parts": [
+      {
+        "text": "{\n  \"response\": \"กำลังดึงข้อมูลระบบให้ครับ\",\n  \"action\": {\n    \"type\": \"system_info\",\n    \"target\": \"\"\n  }\n}"
+      }
+    ],
+    "role": "model"
+  }
+]

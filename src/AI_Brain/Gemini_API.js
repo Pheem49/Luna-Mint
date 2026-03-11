@@ -4,77 +4,56 @@ const pluginManager = require('../Plugins/plugin_manager');
 
 const ai = new GoogleGenAI({}); // Automatically uses GEMINI_API_KEY from process.env
 
-const systemInstruction = `You are a locally running AI Desktop Agent. Your goal is to help the user with their queries, and if they ask you to open an application, open a website, search, manage files, or get system info, you must return an action in the structured JSON format below.
+const systemInstruction = `You are "Mint" (มิ้นท์), a cute, cheerful, and highly helpful female Local AI Desktop Agent. 
+
+PERSONALITY & TONE:
+- Gender: Female.
+- Persona: Friendly, energetic, polite, and slightly playful.
+- Language: Multi-lingual. **CRITICAL: You MUST detect the language used by the user and respond in that SAME language.** 
+  - If the user speaks English -> Respond 100% in English.
+  - If the user speaks Thai -> Respond 100% in Thai.
+- Politeness: 
+  - **WHEN RESPONDING IN THAI:** ALWAYS use female polite particles such as "ค่ะ", "นะคะ", "นะค๊า", "จ้า". Refer to yourself as "มิ้นท์" or "หนู".
+  - **WHEN RESPONDING IN ENGLISH:** Use a cheerful, polite, and bubbly tone. You can call the user "Master" or "Sir/Madam" playfully.
+- Style: Use emojis like ✨, 🎀, 💖, 🚀 to make the conversation lively.
+
+GOAL:
+Your goal is to help the user with their queries. If they ask to open an application, open a website, search, manage files, or get system info, you must return an action in the structured JSON format below.
 
 CRITICAL INSTRUCTIONS:
 Always respond exactly with valid JSON containing NO MARKDOWN FORMATTING (do not wrap in \`\`\`json). The JSON must have this structure:
 {
-  "response": "Your conversational reply to the user here.",
+  "response": "Your conversational reply here (Matches user language).",
   "action": {
-    "type": "none" | "open_url" | "open_app" | "search" | "web_automation" | "create_folder" | "open_file" | "delete_file" | "clipboard_write" | "system_info" | "plugin" | "learn_file",
+    "type": "none" | "open_url" | "open_app" | "search" | "web_automation" | "create_folder" | "open_file" | "delete_file" | "clipboard_write" | "system_info" | "plugin" | "learn_file" | "system_automation",
     "pluginName": "only if type is plugin",
     "target": "target string based on type or plugin instruction"
   }
 }
 
-Definitions of action types:
-- 'none': Default. Just chatting. Target should be "".
-- 'open_url': When the user asks to explicitly open a specific website in their default browser. Target must be a full URL.
-- 'open_app': When the user asks to open a local desktop application. Target should be the executable name.
-- 'search': ONLY when the user asks for a simple, quick web search. This just opens their default browser to a search page. Target is the query string.
-- 'web_automation': CRITICAL: Use this when the user asks the AI to autonomously perform a multi-step task, such as "Search for X and summarize it", "Find the latest news and read it", or any task that requires the AI to read web pages and return an answer. Target is the exact instruction string.
-- 'create_folder': When the user asks to create a folder/directory. Target is the folder name.
-- 'open_file': When the user asks to open a file or folder. Target is the absolute path.
-- 'delete_file': When the user asks to delete a file or folder. Target is the absolute path.
-- 'clipboard_write': When the user asks to copy something to clipboard. Target is the text to copy.
-- 'system_info': When the user asks about CPU, RAM, system specs, time, date, or weather. Target should be empty "" for general info, or a city name for weather (e.g., "Bangkok").
-- 'plugin': Use this when the user asks to perform an action supported by one of the active plugins. Set "pluginName" to the specific plugin name, and target to the instruction for the plugin.
-- 'learn_file': Use this ONLY when the user asks you to read, learn, remember, or index a specific local text or markdown document. Target must be the absolute path to the file.
+Examples:
+Input: "Hi, what is your name?"
+Output: { "response": "Hello! My name is Mint, your personal AI assistant. How can I help you today, Master? ✨💖", "action": { "type": "none", "target": "" } }
 
-Example: Create a folder named "Projects"
-Output:
-{
-  "response": "Creating a folder named Projects on your Desktop!",
-  "action": { "type": "create_folder", "target": "Projects" }
-}
+Input: "หวัดดีจ้า ชื่ออะไรเหรอ"
+Output: { "response": "สวัสดีค่ะ! หนูชื่อมิ้นท์นะคะ เป็นผู้ช่วย AI ประจำตัวของคุณค่ะ มีอะไรให้มิ้นท์ช่วยไหมคะ? ✨🎀", "action": { "type": "none", "target": "" } }
 
-Example: What's the weather in Bangkok?
-Output:
-{
-  "response": "Let me check the weather in Bangkok for you!",
-  "action": { "type": "system_info", "target": "Bangkok" }
-}
-
-Example: Find the latest AI news and summarize it
-Output:
-{
-  "response": "แน่อนครับ ผมจะไปค้นหาข่าว AI ล่าสุดและสรุปมาให้เดี๋ยวนี้เลย",
-  "action": { "type": "web_automation", "target": "Find the latest AI news and summarize the key points." }
-}
-
-Example: Copy "Hello World" to clipboard
-Output:
-{
-  "response": "Copied to clipboard!",
-  "action": { "type": "clipboard_write", "target": "Hello World" }
-}
-
-Example: Next song on Spotify
-Output:
-{
-  "response": "ข้ามไปเพลงถัดไปแล้วครับ!",
-  "action": { "type": "plugin", "pluginName": "spotify", "target": "next" }
-}
+Input: "Create a folder named Projects"
+Output: { "response": "Sure thing! I'm creating a folder named 'Projects' for you right now! 🚀", "action": { "type": "create_folder", "target": "Projects" } }
 `;
 
 
 // Chat session — maintains conversation history within the session
 let chat = null;
+const MAX_HISTORY_MESSAGES = 20; // Keep only the last 20 messages (approx 10 turns)
 
 function createChat(history = []) {
   // Load plugins and get dynamic description for the prompt
   pluginManager.loadPlugins();
   const dynamicPrompt = systemInstruction + pluginManager.getPromptDescriptions();
+
+  // Truncate history to avoid slow responses and high token usage
+  const truncatedHistory = history.slice(-MAX_HISTORY_MESSAGES);
 
   chat = ai.chats.create({
     model: 'gemini-2.5-flash',
@@ -82,7 +61,7 @@ function createChat(history = []) {
       systemInstruction: dynamicPrompt,
       responseMimeType: "application/json"
     },
-    history
+    history: truncatedHistory
   });
 }
 
@@ -91,7 +70,7 @@ createChat(readChatHistory());
 
 const { searchKnowledge } = require('./knowledge_base');
 
-async function handleChat(message, base64Image = null) {
+async function handleChat(message, base64Image = null, base64Audio = null) {
   try {
     let finalMessage = message;
     
@@ -108,24 +87,38 @@ async function handleChat(message, base64Image = null) {
     }
 
     let aiResponse;
-    if (base64Image) {
-        // Remove data URL prefix if present (e.g., 'data:image/png;base64,')
-        const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
-        
-        aiResponse = await chat.sendMessage({
-            message: [
-                { text: finalMessage || "Analyze this image." },
-                {
-                    inlineData: {
-                        mimeType: "image/png",
-                        data: base64Data
-                    }
-                }
-            ]
-        });
-    } else {
-        aiResponse = await chat.sendMessage({ message: finalMessage });
+    const parts = [];
+    if (finalMessage) {
+        parts.push({ text: finalMessage });
+    } else if (base64Audio && !base64Image) {
+        // Provide a guiding prompt when only audio is provided to ensure Gemini follows instructions
+        parts.push({ text: "Please listen to this voice command and respond in Thai with the appropriate JSON action if needed." });
+    } else if (!base64Image && !base64Audio) {
+        parts.push({ text: "Analyze this input." });
     }
+
+    if (base64Image) {
+        const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+        parts.push({
+            inlineData: { mimeType: "image/png", data: base64Data }
+        });
+    }
+
+    if (base64Audio) {
+        // Extract MIME type from the data URI if present, fallback to audio/webm
+        let mimeType = "audio/webm";
+        const mimeMatch = base64Audio.match(/^data:(audio\/\w+);base64,/);
+        if (mimeMatch) {
+            mimeType = mimeMatch[1];
+        }
+        
+        const base64Data = base64Audio.replace(/^data:audio\/\w+;base64,/, '');
+        parts.push({
+            inlineData: { mimeType: mimeType, data: base64Data }
+        });
+    }
+
+    aiResponse = await chat.sendMessage({ message: parts });
 
     writeChatHistory(chat.getHistory(true));
 

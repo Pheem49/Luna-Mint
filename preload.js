@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-    sendMessage: (message, base64Image) => ipcRenderer.invoke('chat-message', message, base64Image),
+    sendMessage: (message, base64Image, base64Audio) => ipcRenderer.invoke('chat-message', message, base64Image, base64Audio),
     closeWindow: () => ipcRenderer.send('close-window'),
     maximizeWindow: () => ipcRenderer.send('maximize-window'),
     resetChat: () => ipcRenderer.invoke('reset-chat'),
@@ -25,5 +25,6 @@ contextBridge.exposeInMainWorld('api', {
     onProactiveSuggestion: (callback) => ipcRenderer.on('proactive-suggestion', (_event, data) => callback(data)),
     toggleProactive: (isOn) => ipcRenderer.send('toggle-proactive', isOn),
     recordBehavior: (context) => ipcRenderer.send('record-behavior', context),
-    executeProactiveAction: (action) => ipcRenderer.invoke('execute-proactive-action', action)
+    executeProactiveAction: (action) => ipcRenderer.invoke('execute-proactive-action', action),
+    onSpotlightToChat: (callback) => ipcRenderer.on('spotlight-to-chat', (_event, query) => callback(query))
 });

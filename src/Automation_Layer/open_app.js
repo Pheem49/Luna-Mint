@@ -14,9 +14,28 @@ function openApp(target) {
         }
     } else {
         const tLower = target.toLowerCase();
+        const tCapitalized = target.charAt(0).toUpperCase() + target.slice(1).toLowerCase();
+        
         // Try common linux patterns: gtk-launch, exact name, lowercase, flatpak
         if (!target.includes('/')) {
-            cmd = `gtk-launch ${target} || gtk-launch ${tLower} || ${target} || ${tLower} || flatpak run com.${tLower}app.${target} || flatpak run com.${tLower}.${target} || snap run ${tLower}`;
+            const patterns = [
+                `gtk-launch ${target}`,
+                `gtk-launch ${tLower}`,
+                `gtk-launch ${tCapitalized}`,
+                `gtk-launch com.${tLower}app.${tCapitalized}`,
+                `gtk-launch com.${tLower}.${tCapitalized}`,
+                target,
+                tLower,
+                `flatpak run ${target}`, // In case target is already ID
+                `flatpak run com.${tLower}app.${tCapitalized}`,
+                `flatpak run com.${tLower}.${tCapitalized}`,
+                `flatpak run com.${tLower}.Browser`,
+                `flatpak run com.${tLower}.${target}`,
+                `flatpak run com.valvesoftware.Steam`,
+                `flatpak run net.lutris.Lutris`,
+                `snap run ${tLower}`
+            ];
+            cmd = patterns.join(' || ');
         } else {
             cmd = `xdg-open "${target}"`;
         }

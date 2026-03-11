@@ -51,55 +51,102 @@ window.api.onSettingsChanged((config) => {
     applyTheme(config.theme, config.accentColor);
 });
 
-// --- Speech Recognition Setup ---
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition = null;
-if (SpeechRecognition) {
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    // Set language to Thai (you can change to 'en-US' or leave empty for auto)
-    recognition.lang = 'th-TH'; // Defaulting to Thai as requested
-    recognition.interimResults = false;
+// --- Gemini Voice (Multimodal STT) Setup ---
+let mediaRecorder = null;
+let audioChunks = [];
+const DEFAULT_PLACEHOLDER = "Type or speak a command...";
 
-    recognition.onstart = function () {
-        micBtn.classList.add('listening');
-        chatInput.placeholder = "Listening...";
-    };
+async function setupMediaRecorder() {
+    try {
+        // Improved audio constraints for better quality and noise reduction
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            } 
+        });
 
-    recognition.onresult = function (event) {
-        const transcript = event.results[0][0].transcript;
-        chatInput.value = transcript;
-        // Automatically submit the form once speech is recognized
-        chatForm.dispatchEvent(new Event('submit'));
-    };
+        // Check for supported MIME types
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+        mediaRecorder = new MediaRecorder(stream, { mimeType });
 
-    recognition.onerror = function (event) {
-        console.error("Speech recognition error", event.error);
-        micBtn.classList.remove('listening');
-        chatInput.placeholder = "Type or speak a command...";
-    };
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) audioChunks.push(event.data);
+        };
 
-    recognition.onend = function () {
-        micBtn.classList.remove('listening');
-        chatInput.placeholder = "Type or speak a command...";
-    };
-} else {
-    micBtn.style.display = 'none'; // Hide if not supported
-    console.warn("Speech Recognition API not supported in this browser.");
+        mediaRecorder.onstop = async () => {
+            if (audioChunks.length === 0) {
+                resetMicUI();
+                return;
+            }
+
+            const audioBlob = new Blob(audioChunks, { type: mimeType });
+            audioChunks = [];
+            
+            // Convert Blob to Base64
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = reader.result;
+                // Send to Gemini
+                await sendVoiceMessage(base64Audio);
+            };
+        };
+
+        mediaRecorder.onstart = () => {
+            micBtn.classList.add('listening');
+            chatInput.placeholder = "Listening... (Click to stop)";
+        };
+
+    } catch (err) {
+        console.error("Microphone access error:", err);
+        micBtn.style.display = 'none';
+        appendMessage("❌ ไม่สามารถเข้าถึงไมโครโฟนได้ค่ะ กรุณาตรวจสอบการตั้งค่าระดับระบบ", 'ai');
+    }
 }
 
-micBtn.addEventListener('click', (e) => {
-    e.preventDefault(); // Prevent form submission if it's inside one
-    if (recognition) {
-        if (micBtn.classList.contains('listening')) {
-            recognition.stop();
-        } else {
-            try {
-                recognition.start();
-            } catch (err) {
-                console.warn("Speech recognition already started or failed:", err);
-            }
+function resetMicUI() {
+    micBtn.classList.remove('listening');
+    chatInput.placeholder = DEFAULT_PLACEHOLDER;
+}
+
+async function sendVoiceMessage(base64Audio) {
+    showTyping();
+    chatInput.placeholder = "Processing voice...";
+    try {
+        // Send empty text, but include the audio
+        const response = await window.api.sendMessage("", null, base64Audio);
+        removeTyping();
+        
+        // Show AI response
+        const msgDiv = appendMessage(response.response, 'ai');
+        speakText(response.response);
+
+        if (response.action && response.action.type !== 'none') {
+            appendActionCard(msgDiv, response.action);
         }
+    } catch (error) {
+        removeTyping();
+        appendMessage("ขออภัยค่ะ เกิดข้อผิดพลาดในการประมวลผลเสียง", 'ai');
+        console.error(error);
+    } finally {
+        resetMicUI();
+    }
+}
+
+// Initialize recorder
+setupMediaRecorder();
+
+micBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!mediaRecorder) return;
+
+    if (mediaRecorder.state === 'inactive') {
+        audioChunks = [];
+        mediaRecorder.start();
+    } else {
+        mediaRecorder.stop();
     }
 });
 
@@ -320,8 +367,8 @@ chatForm.addEventListener('submit', throttle(async (e) => {
     hideProactiveBar();
 
     try {
-        // Send to main process
-        const response = await window.api.sendMessage(text, imageToSend);
+        // Send to main process (text, image, audio=null)
+        const response = await window.api.sendMessage(text, imageToSend, null);
         removeTyping();
 
         // Handle system_info action: fetch data and append to AI message
@@ -489,3 +536,9 @@ if (smartContextToggle) {
         window.api.toggleProactive(smartContextToggle.checked);
     });
 }
+
+// Spotlight integration
+window.api.onSpotlightToChat((query) => {
+    chatInput.value = query;
+    chatForm.dispatchEvent(new Event('submit'));
+});

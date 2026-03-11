@@ -14,10 +14,12 @@ const pluginManager = require('./src/Plugins/plugin_manager');
 const { analyzeAndSuggest } = require('./src/AI_Brain/proactive_engine');
 const { recordBehavior, getBehaviorSummary } = require('./src/AI_Brain/behavior_memory');
 const { indexFile } = require('./src/AI_Brain/knowledge_base');
+const SystemAutomation = require('./src/System/system_automation');
 
 let mainWindow;
 let settingsWindow = null;
 let screenPickerWindow = null;
+let spotlightWindow = null;
 let tray = null;
 
 // =====================
@@ -109,8 +111,8 @@ setInterval(() => {
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 400,
-        height: 600,
+        width: 600,
+        height: 800,
         icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -193,6 +195,44 @@ function createSettingsWindow() {
     settingsWindow.on('closed', () => { settingsWindow = null; });
 }
 
+function createSpotlightWindow() {
+    if (spotlightWindow) {
+        spotlightWindow.show();
+        return;
+    }
+
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+    const windowWidth = 600;
+    const windowHeight = 80; // Starts small, expands if results show
+
+    spotlightWindow = new BrowserWindow({
+        width: windowWidth,
+        height: windowHeight,
+        x: Math.floor((screenWidth - windowWidth) / 2),
+        y: Math.floor(screenHeight * 0.25), // 25% from top
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'src/UI/preload-spotlight.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+        }
+    });
+
+    spotlightWindow.loadFile('src/UI/spotlight.html');
+
+    spotlightWindow.on('blur', () => {
+        spotlightWindow.hide();
+    });
+
+    spotlightWindow.on('closed', () => {
+        spotlightWindow = null;
+    });
+}
+
 app.whenReady().then(() => {
     createWindow();
     createTray();
@@ -204,6 +244,15 @@ app.whenReady().then(() => {
             } else {
                 mainWindow.show();
             }
+        }
+    });
+
+    globalShortcut.register('Alt+Space', () => {
+        if (spotlightWindow && spotlightWindow.isVisible()) {
+            spotlightWindow.hide();
+        } else {
+            createSpotlightWindow();
+            spotlightWindow.show();
         }
     });
 
@@ -223,9 +272,9 @@ app.on('will-quit', () => {
 // =====================
 // IPC Handlers — Chat
 // =====================
-ipcMain.handle('chat-message', async (event, message, base64Image = null) => {
+ipcMain.handle('chat-message', async (event, message, base64Image = null, base64Audio = null) => {
     try {
-        const rawResponse = await handleChat(message, base64Image);
+        const rawResponse = await handleChat(message, base64Image, base64Audio);
         const aiResponse = parseCommand(rawResponse);
 
         if (aiResponse.action && aiResponse.action.type !== 'none') {
@@ -300,6 +349,35 @@ ipcMain.handle('save-settings', (event, config) => {
 
 ipcMain.on('close-settings', () => {
     if (settingsWindow) settingsWindow.close();
+});
+
+// =====================
+// IPC Handlers — Spotlight
+// =====================
+ipcMain.on('spotlight-close', () => {
+    if (spotlightWindow) spotlightWindow.close();
+});
+
+ipcMain.on('spotlight-hide', () => {
+    if (spotlightWindow) spotlightWindow.hide();
+});
+
+ipcMain.on('spotlight-submit', async (event, query) => {
+    console.log('[Spotlight] Submit:', query);
+    if (spotlightWindow) spotlightWindow.hide();
+    
+    // Show main window and send the message
+    if (mainWindow) {
+        mainWindow.show();
+        // We can either just show it or actually trigger the chat
+        mainWindow.webContents.send('spotlight-to-chat', query);
+    }
+});
+
+ipcMain.on('spotlight-resize', (event, width, height) => {
+    if (spotlightWindow) {
+        spotlightWindow.setSize(width, height);
+    }
 });
 
 ipcMain.handle('open-external', (event, url) => {
@@ -592,5 +670,33 @@ async function executeAction(action) {
             return await indexFile(action.target);
         case 'plugin':
             return await pluginManager.executePlugin(action.pluginName, action.target);
+        case 'system_automation':
+            return await handleSystemAutomation(action.target);
+    }
+}
+
+async function handleSystemAutomation(target) {
+    const [cmd, value] = target.split(':');
+    switch (cmd) {
+        case 'volume':
+            return await SystemAutomation.setVolume(parseInt(value));
+        case 'mute':
+            return await SystemAutomation.mute();
+        case 'brightness':
+            return await SystemAutomation.setBrightness(parseInt(value));
+        case 'sleep':
+            return await SystemAutomation.sleep();
+        case 'restart':
+            return await SystemAutomation.restart();
+        case 'shutdown':
+            return await SystemAutomation.shutdown();
+        case 'minimize_all':
+            return await SystemAutomation.minimizeAll();
+        default:
+            // Handle cases where target is just the command (like 'sleep')
+            if (SystemAutomation[target]) {
+                return await SystemAutomation[target]();
+            }
+            throw new Error(`Unknown system automation command: ${target}`);
     }
 }
