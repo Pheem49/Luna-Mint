@@ -219,8 +219,8 @@ async function sendVoiceMessage(base64Audio) {
         removeTyping();
         
         // Show AI response
-        const msgDiv = appendMessage(response.response, 'ai');
-        speakText(response.response);
+        const msgDiv = await appendAiMessages(response.response, { allowDelay: true });
+        speakText(normalizeAiText(response.response));
         notifyAiIfNeeded();
 
         if (response.action && response.action.type !== 'none') {
@@ -404,6 +404,85 @@ function appendMessage(text, sender, base64Image = null) {
     return messageDiv; // Return it so we can append action cards if needed
 }
 
+function normalizeAiText(input) {
+    if (Array.isArray(input)) {
+        return input
+            .map((item) => (item == null ? '' : String(item).trim()))
+            .filter(Boolean)
+            .join('\n\n');
+    }
+    if (input == null) return '';
+    return String(input);
+}
+
+function splitAiMessages(text) {
+    const normalized = normalizeAiText(text).trim();
+    if (!normalized) return [];
+    const byBlankLine = normalized
+        .split(/\n\s*\n/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    if (byBlankLine.length > 1) return byBlankLine;
+    return autoChunkAiText(normalized);
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function estimateMessageDelay(text) {
+    const base = 260;
+    const perChar = 12;
+    const jitter = Math.floor(Math.random() * 120);
+    const scaled = base + Math.min(1200, text.length * perChar) + jitter;
+    return Math.min(1600, scaled);
+}
+
+async function appendAiMessages(text, options = {}) {
+    const allowDelay = options.allowDelay !== false;
+    const parts = splitAiMessages(text);
+    let lastDiv = null;
+
+    for (let index = 0; index < parts.length; index += 1) {
+        if (allowDelay && index > 0) {
+            showTyping();
+            await sleep(estimateMessageDelay(parts[index]));
+            removeTyping();
+        }
+        lastDiv = appendMessage(parts[index], 'ai');
+    }
+
+    return lastDiv;
+}
+
+function autoChunkAiText(text) {
+    const trimmed = text.trim();
+    if (trimmed.length <= 120) return [trimmed];
+
+    const sentenceMatches = trimmed.match(/[^.!?…\n]+[.!?…]+|[^.!?…\n]+$/g);
+    if (!sentenceMatches || sentenceMatches.length <= 1) return [trimmed];
+
+    const bubbles = [];
+    let current = '';
+    for (const sentence of sentenceMatches) {
+        const next = current ? `${current} ${sentence}` : sentence;
+        if (next.length > 180 && current) {
+            bubbles.push(current.trim());
+            current = sentence;
+        } else {
+            current = next;
+        }
+    }
+    if (current.trim()) bubbles.push(current.trim());
+
+    if (bubbles.length > 3) {
+        const merged = [bubbles[0], bubbles[1], bubbles.slice(2).join(' ').trim()];
+        return merged.filter(Boolean);
+    }
+
+    return bubbles.length > 0 ? bubbles : [trimmed];
+}
+
 function appendActionCard(messageDiv, action) {
     const card = document.createElement('div');
     card.classList.add('action-card');
@@ -470,7 +549,11 @@ async function loadChatHistory() {
         for (const item of history) {
             if (!item || typeof item.text !== 'string' || !item.text.trim()) continue;
             const sender = item.sender === 'user' ? 'user' : 'ai';
-            appendMessage(item.text, sender);
+            if (sender === 'ai') {
+                await appendAiMessages(item.text, { allowDelay: false });
+            } else {
+                appendMessage(item.text, sender);
+            }
         }
     } catch (error) {
         console.error('Failed to load chat history:', error);
@@ -521,6 +604,10 @@ async function sendTextMessage(text, options = {}) {
         const response = await window.api.sendMessage(cleanText, imageToSend, null);
         removeTyping();
 
+        if (typeof response.response !== 'string') {
+            response.response = normalizeAiText(response.response);
+        }
+
         // Handle system_info action: fetch data and append to AI message
         if (response.action && response.action.type === 'system_info') {
             const city = response.action.target || '';
@@ -536,10 +623,10 @@ async function sendTextMessage(text, options = {}) {
         }
 
         // Show AI response
-        const msgDiv = appendMessage(response.response, 'ai');
+        const msgDiv = await appendAiMessages(response.response, { allowDelay: true });
 
         // Speak AI response
-        speakText(response.response);
+        speakText(normalizeAiText(response.response));
         notifyAiIfNeeded();
 
         // Append action card if applicable
