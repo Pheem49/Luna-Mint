@@ -51,10 +51,109 @@ window.api.onSettingsChanged((config) => {
     applyTheme(config.theme, config.accentColor);
 });
 
-// --- Gemini Voice (Multimodal STT) Setup ---
+// --- Voice Input Setup ---
 let mediaRecorder = null;
 let audioChunks = [];
+let speechRecognition = null;
+let isSpeechStreaming = false;
+let speechInterim = '';
+let speechHadResult = false;
+let speechFallbackTimer = null;
+let voiceMode = null; // 'speech' | 'recorder' | null
+let voiceSendQueue = Promise.resolve();
 const DEFAULT_PLACEHOLDER = "Type or speak a command...";
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function notifyAiIfNeeded() {
+    if (!window.api.notifyAiResponse) return;
+    if (!document.hasFocus() || document.hidden) {
+        window.api.notifyAiResponse();
+    } else if (window.api.clearAiNotifications) {
+        window.api.clearAiNotifications();
+    }
+}
+
+function queueVoiceTextSend(text) {
+    const clean = (text || '').trim();
+    if (!clean) return;
+    voiceSendQueue = voiceSendQueue.then(() => sendTextMessage(clean, { allowSmartContext: false }));
+}
+
+function setupSpeechRecognition() {
+    if (!SpeechRecognitionCtor) return;
+    speechRecognition = new SpeechRecognitionCtor();
+    speechRecognition.lang = 'th-TH';
+    speechRecognition.interimResults = true;
+    // Let the engine auto-stop on silence, then we restart if streaming is enabled.
+    speechRecognition.continuous = false;
+
+    speechRecognition.onstart = () => {
+        micBtn.classList.add('listening');
+        chatInput.placeholder = "Listening... (Click to stop)";
+        speechHadResult = false;
+        if (speechFallbackTimer) clearTimeout(speechFallbackTimer);
+        speechFallbackTimer = setTimeout(() => {
+            if (isSpeechStreaming && !speechHadResult) {
+                fallbackToMediaRecorder();
+            }
+        }, 1500);
+    };
+
+    speechRecognition.onresult = (event) => {
+        speechHadResult = true;
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0]?.transcript || '';
+            if (result.isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+
+        if (finalTranscript.trim()) {
+            const textToSend = finalTranscript.trim();
+            speechInterim = '';
+            chatInput.value = '';
+            queueVoiceTextSend(textToSend);
+        } else {
+            speechInterim = interimTranscript;
+            chatInput.value = speechInterim.trimStart();
+        }
+    };
+
+    speechRecognition.onerror = (err) => {
+        console.error("Speech recognition error:", err);
+        fallbackToMediaRecorder();
+        isSpeechStreaming = false;
+        resetMicUI();
+    };
+
+    speechRecognition.onend = () => {
+        if (speechFallbackTimer) {
+            clearTimeout(speechFallbackTimer);
+            speechFallbackTimer = null;
+        }
+        if (isSpeechStreaming && !speechHadResult) {
+            fallbackToMediaRecorder();
+            return;
+        }
+        if (isSpeechStreaming) {
+            try {
+                speechRecognition.start();
+            } catch (e) {
+                console.error("Speech recognition restart error:", e);
+                isSpeechStreaming = false;
+                resetMicUI();
+            }
+        } else {
+            resetMicUI();
+        }
+    };
+}
 
 async function setupMediaRecorder() {
     try {
@@ -122,6 +221,7 @@ async function sendVoiceMessage(base64Audio) {
         // Show AI response
         const msgDiv = appendMessage(response.response, 'ai');
         speakText(response.response);
+        notifyAiIfNeeded();
 
         if (response.action && response.action.type !== 'none') {
             appendActionCard(msgDiv, response.action);
@@ -135,11 +235,62 @@ async function sendVoiceMessage(base64Audio) {
     }
 }
 
-// Initialize recorder
+function fallbackToMediaRecorder() {
+    if (voiceMode === 'recorder') return;
+    isSpeechStreaming = false;
+    voiceMode = 'recorder';
+    try {
+        if (speechRecognition) {
+            speechRecognition.stop();
+        }
+    } catch (_) {}
+    if (mediaRecorder && mediaRecorder.state === 'inactive') {
+        audioChunks = [];
+        mediaRecorder.start();
+    }
+}
+
+// Initialize voice input
 setupMediaRecorder();
+if (SpeechRecognitionCtor) {
+    setupSpeechRecognition();
+}
 
 micBtn.addEventListener('click', (e) => {
     e.preventDefault();
+    if (voiceMode === 'recorder') {
+        if (!mediaRecorder) return;
+        if (mediaRecorder.state === 'inactive') {
+            audioChunks = [];
+            mediaRecorder.start();
+        } else {
+            mediaRecorder.stop();
+            voiceMode = null;
+        }
+        return;
+    }
+
+    if (speechRecognition) {
+        if (!isSpeechStreaming) {
+            isSpeechStreaming = true;
+            voiceMode = 'speech';
+            speechInterim = '';
+            chatInput.value = '';
+            try {
+                speechRecognition.start();
+            } catch (err) {
+                console.error("Speech recognition start error:", err);
+                isSpeechStreaming = false;
+                resetMicUI();
+            }
+        } else {
+            isSpeechStreaming = false;
+            speechRecognition.stop();
+            voiceMode = null;
+        }
+        return;
+    }
+
     if (!mediaRecorder) return;
 
     if (mediaRecorder.state === 'inactive') {
@@ -326,17 +477,16 @@ async function loadChatHistory() {
     }
 }
 
-chatForm.addEventListener('submit', throttle(async (e) => {
-    e.preventDefault();
-    const text = chatInput.value.trim();
-    
+async function sendTextMessage(text, options = {}) {
+    const cleanText = (text || '').trim();
+    const allowSmartContext = options.allowSmartContext !== false;
+
     // We can send either a text message, an image, or both.
-    if (!text && !currentBase64Image) return;
+    if (!cleanText && !currentBase64Image) return;
 
     // Cache the image for sending and UI, then clear
     let imageToSend = currentBase64Image;
-    let isSmartContextImage = false;
-    
+
     // Clear input & UI for explicit images
     chatInput.value = '';
     currentBase64Image = null;
@@ -344,14 +494,14 @@ chatForm.addEventListener('submit', throttle(async (e) => {
     imagePreview.src = '';
 
     // Show user message (with explicit image if available)
-    appendMessage(text, 'user', imageToSend);
+    appendMessage(cleanText, 'user', imageToSend);
 
     // Show typing early so user knows we are processing
     showTyping();
 
     // Check Smart Context Toggle
     const smartToggle = document.getElementById('smart-context-toggle');
-    if (smartToggle && smartToggle.checked && !imageToSend) {
+    if (allowSmartContext && smartToggle && smartToggle.checked && !imageToSend) {
         try {
             const silentCapture = await window.api.captureSilentScreen();
             if (silentCapture) {
@@ -368,7 +518,7 @@ chatForm.addEventListener('submit', throttle(async (e) => {
 
     try {
         // Send to main process (text, image, audio=null)
-        const response = await window.api.sendMessage(text, imageToSend, null);
+        const response = await window.api.sendMessage(cleanText, imageToSend, null);
         removeTyping();
 
         // Handle system_info action: fetch data and append to AI message
@@ -390,6 +540,7 @@ chatForm.addEventListener('submit', throttle(async (e) => {
 
         // Speak AI response
         speakText(response.response);
+        notifyAiIfNeeded();
 
         // Append action card if applicable
         if (response.action && response.action.type !== 'none' && response.action.type !== 'system_info') {
@@ -400,6 +551,12 @@ chatForm.addEventListener('submit', throttle(async (e) => {
         appendMessage("Sorry, I encountered an error communicating with the main process.", 'ai');
         console.error(error);
     }
+}
+
+chatForm.addEventListener('submit', throttle(async (e) => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    await sendTextMessage(text);
 }, 500));
 
 // --- Image Paste and Drag-n-Drop Support ---
@@ -458,6 +615,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     chatInput.focus();
     await loadTheme();
     await loadChatHistory();
+});
+
+window.addEventListener('focus', () => {
+    if (window.api.clearAiNotifications) window.api.clearAiNotifications();
 });
 
 // =====================
@@ -521,6 +682,7 @@ function hideProactiveBar() {
 window.api.onProactiveSuggestion((data) => {
     if (data && data.message && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
         showProactiveBar(data);
+        notifyAiIfNeeded();
     }
 });
 

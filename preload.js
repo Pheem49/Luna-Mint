@@ -26,5 +26,7 @@ contextBridge.exposeInMainWorld('api', {
     toggleProactive: (isOn) => ipcRenderer.send('toggle-proactive', isOn),
     recordBehavior: (context) => ipcRenderer.send('record-behavior', context),
     executeProactiveAction: (action) => ipcRenderer.invoke('execute-proactive-action', action),
-    onSpotlightToChat: (callback) => ipcRenderer.on('spotlight-to-chat', (_event, query) => callback(query))
+    onSpotlightToChat: (callback) => ipcRenderer.on('spotlight-to-chat', (_event, query) => callback(query)),
+    notifyAiResponse: () => ipcRenderer.send('ai-notify'),
+    clearAiNotifications: () => ipcRenderer.send('ai-notify-clear')
 });

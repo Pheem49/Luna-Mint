@@ -20,7 +20,9 @@ let mainWindow;
 let settingsWindow = null;
 let screenPickerWindow = null;
 let spotlightWindow = null;
+let floatingWindow = null;
 let tray = null;
+let floatingUnreadCount = 0;
 
 // =====================
 // Proactive Loop
@@ -138,6 +140,10 @@ function createWindow() {
         }
         return false;
     });
+
+    mainWindow.on('focus', () => {
+        clearFloatingUnread();
+    });
 }
 
 function createTray() {
@@ -233,9 +239,58 @@ function createSpotlightWindow() {
     });
 }
 
+function createFloatingWindow() {
+    if (floatingWindow) return;
+    const display = screen.getPrimaryDisplay();
+    const { x, y, width, height } = display.workArea;
+    const size = 72;
+    const margin = 20;
+    const posX = x + width - size - margin;
+    const posY = y + height - size - margin - 40;
+
+    floatingWindow = new BrowserWindow({
+        width: size,
+        height: size,
+        x: posX,
+        y: posY,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        show: true,
+        webPreferences: {
+            preload: path.join(__dirname, 'src/UI/preload-floating.js'),
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+
+    floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    floatingWindow.setAlwaysOnTop(true, 'floating');
+    floatingWindow.loadFile('src/UI/floating.html');
+
+    floatingWindow.on('closed', () => {
+        floatingWindow = null;
+    });
+}
+
+function updateFloatingUnread() {
+    if (floatingWindow && !floatingWindow.isDestroyed()) {
+        floatingWindow.webContents.send('floating-notify', floatingUnreadCount);
+    }
+}
+
+function clearFloatingUnread() {
+    if (floatingUnreadCount === 0) return;
+    floatingUnreadCount = 0;
+    updateFloatingUnread();
+}
+
 app.whenReady().then(() => {
     createWindow();
     createTray();
+    createFloatingWindow();
 
     globalShortcut.register('CommandOrControl+Shift+Space', () => {
         if (mainWindow) {
@@ -378,6 +433,34 @@ ipcMain.on('spotlight-resize', (event, width, height) => {
     if (spotlightWindow) {
         spotlightWindow.setSize(width, height);
     }
+});
+
+// =====================
+// IPC — Floating Icon
+// =====================
+ipcMain.on('floating-click', () => {
+    if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+    }
+    clearFloatingUnread();
+});
+
+ipcMain.on('ai-notify', () => {
+    floatingUnreadCount += 1;
+    updateFloatingUnread();
+});
+
+ipcMain.on('ai-notify-clear', () => {
+    clearFloatingUnread();
+});
+
+ipcMain.on('floating-drag-move', (_event, x, y) => {
+    if (!floatingWindow || floatingWindow.isDestroyed()) return;
+    const [width, height] = floatingWindow.getSize();
+    const posX = Math.round(x - width / 2);
+    const posY = Math.round(y - height / 2);
+    floatingWindow.setBounds({ x: posX, y: posY, width, height });
 });
 
 ipcMain.handle('open-external', (event, url) => {
